@@ -1,0 +1,124 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quizzes   Quiz[]
+  sessions  GameSession[]
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String   // SHA-256 hash of the 6-digit OTP
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Quiz {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  coverImage  String?
+  isPublic    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  hostId      String
+  host        User       @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  rounds      Round[]
+  sessions    GameSession[]
+}
+
+model Round {
+  id         String     @id @default(uuid())
+  name       String     @default("Round 1")
+  orderIndex Int        @default(0)
+  quizId     String
+  quiz       Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questions  Question[]
+}
+
+model Question {
+  id            String         @id @default(uuid())
+  text          String
+  imageUrl      String?
+  timeLimit     Int            @default(20) // seconds
+  points        Int            @default(1000)
+  orderIndex    Int
+  quizId        String
+  quiz          Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  roundId       String?
+  round         Round?         @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  options       AnswerOption[]
+  playerAnswers PlayerAnswer[]
+}
+
+model AnswerOption {
+  id         String         @id @default(uuid())
+  text       String
+  isCorrect  Boolean        @default(false)
+  color      String         @default("#e21b3c") // red, blue, yellow, green
+  questionId String
+  question   Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers    PlayerAnswer[]
+}
+
+model GameSession {
+  id            String   @id @default(uuid())
+  pin           String   @unique
+  status        String   @default("WAITING") // WAITING | IN_PROGRESS | FINISHED
+  currentQuestionIndex Int @default(-1)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime       @default(now())
+  quizId        String
+  quiz          Quiz           @relation(fields: [quizId], references: [id])
+  hostId        String
+  host          User           @relation(fields: [hostId], references: [id])
+  players       Player[]
+  playerAnswers PlayerAnswer[]
+}
+
+model Player {
+  id        String         @id @default(uuid())
+  nickname  String
+  score     Int            @default(0)
+  rank      Int?
+  joinedAt  DateTime       @default(now())
+  sessionId String
+  session   GameSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answers   PlayerAnswer[]
+
+  @@unique([sessionId, nickname])
+}
+
+model PlayerAnswer {
+  id            String       @id @default(uuid())
+  timeTaken     Float        // seconds taken to answer
+  pointsAwarded Int          @default(0)
+  isCorrect     Boolean
+  answeredAt    DateTime     @default(now())
+  playerId      String
+  player        Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question     @relation(fields: [questionId], references: [id])
+  selectedOptionId String?
+  selectedOption   AnswerOption? @relation(fields: [selectedOptionId], references: [id])
+  sessionId     String
+  session       GameSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+

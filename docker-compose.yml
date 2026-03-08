@@ -1,0 +1,78 @@
+version: '3.9'
+
+###############################################################################
+# QuizSpark — Docker Compose
+#
+# Coexistence on a shared Vultr server:
+#   • Each Compose project gets its own internal bridge network so services
+#     don't collide with other Docker apps.
+#   • The frontend container is exposed on APP_PORT (default 8080).
+#     Point your host nginx/Traefik vhost at 127.0.0.1:8080 for the domain.
+#   • PostgreSQL is NOT exposed externally; it's internal-only.
+#
+# Quick start:
+#   cp .env.production .env   # then fill in real values
+#   docker compose up -d --build
+###############################################################################
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       quizspark
+      POSTGRES_USER:     quizspark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - quizspark_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quizspark"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Node.js / Express / Socket.io) ─────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:            postgresql://quizspark:${POSTGRES_PASSWORD}@postgres:5432/quizspark
+      JWT_SECRET:              ${JWT_SECRET}
+      PORT:                    3000
+      FRONTEND_URL:            ${FRONTEND_URL}
+      MS_GRAPH_TENANT_ID:      ${MS_GRAPH_TENANT_ID}
+      MS_GRAPH_CLIENT_ID:      ${MS_GRAPH_CLIENT_ID}
+      MS_GRAPH_CLIENT_SECRET:  ${MS_GRAPH_CLIENT_SECRET}
+      MS_GRAPH_FROM_EMAIL:     ${MS_GRAPH_FROM_EMAIL}
+    networks:
+      - quizspark_net
+
+  # ── Frontend (Angular → nginx) ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-8080}:80"   # host:container — change APP_PORT in .env
+    networks:
+      - quizspark_net
+
+volumes:
+  postgres_data:
+
+networks:
+  quizspark_net:
+    name: quizspark_net
+    driver: bridge
