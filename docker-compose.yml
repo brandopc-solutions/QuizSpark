@@ -1,16 +1,9 @@
 ###############################################################################
 # QuizSpark — Docker Compose
 #
-# Coexistence on a shared Vultr server:
-#   • Each Compose project gets its own internal bridge network so services
-#     don't collide with other Docker apps.
-#   • The frontend container is exposed on APP_PORT (default 8080).
-#     Point your host nginx/Traefik vhost at 127.0.0.1:8080 for the domain.
-#   • PostgreSQL is NOT exposed externally; it's internal-only.
-#
-# Quick start:
-#   cp .env.production .env   # then fill in real values
-#   docker compose up -d --build
+# Host nginx (running on 80/443) acts as reverse proxy.
+# This container exposes the frontend on APP_PORT (default 8080).
+# Add a nginx vhost on the server pointing to 127.0.0.1:<APP_PORT>.
 ###############################################################################
 
 services:
@@ -46,7 +39,7 @@ services:
       DATABASE_URL:            postgresql://quizspark:${POSTGRES_PASSWORD}@postgres:5432/quizspark
       JWT_SECRET:              ${JWT_SECRET}
       PORT:                    3000
-      FRONTEND_URL:            ${FRONTEND_URL}
+      FRONTEND_URL:            https://${DOMAIN}
       MS_GRAPH_TENANT_ID:      ${MS_GRAPH_TENANT_ID}
       MS_GRAPH_CLIENT_ID:      ${MS_GRAPH_CLIENT_ID}
       MS_GRAPH_CLIENT_SECRET:  ${MS_GRAPH_CLIENT_SECRET}
@@ -63,7 +56,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${APP_PORT:-8080}:80"   # host:container — change APP_PORT in .env
+      - "${APP_PORT:-8080}:80"
     networks:
       - quizspark_net
 
@@ -74,3 +67,4 @@ networks:
   quizspark_net:
     name: quizspark_net
     driver: bridge
+
